@@ -1,0 +1,34 @@
+# Deep Interview Context Snapshot
+
+- Task statement: Build a Mac app that takes videos in multiple aspect ratios (1:1, 16:9, 9:16, etc.), transcribes speech, and adds configurable animated subtitles with a TikTok-style feel.
+- Desired outcome: A desktop app usable on the user's MacBook for subtitle generation/styling across common social video formats.
+- Stated solution: A local app for importing video, transcribing it, and rendering stylized subtitles with configurable font, animated text treatment, and text background box.
+- Probable intent hypothesis: The user wants a practical creator workflow tool for producing social-media-ready captioned videos quickly while retaining control over subtitle look-and-feel.
+- Known facts / evidence:
+  - User explicitly wants MacBook usage.
+  - User explicitly wants support for multiple aspect ratios: 1:1, 16:9, 9:16, etc.
+  - User explicitly wants transcription + subtitle rendering.
+  - User explicitly wants configurable subtitle style: font, text background box, TikTok-like animation.
+  - Repository is currently greenfield for product code: only AGENTS/OMX/Codex metadata exists; no existing app/source files were found at the repo top level.
+- Constraints:
+  - Must be usable on macOS.
+  - Must support multiple video formats/aspect ratios.
+  - Subtitle styling must be configurable.
+- Unknowns / open questions:
+  - Primary user/job-to-be-done beyond the broad feature ask.
+  - Desired degree of automation vs manual editing.
+  - Whether processing should be fully local, cloud-assisted, or hybrid.
+  - Output expectations (burned-in video export, subtitle files, timeline editing, templates, batch processing).
+  - Quality/performance expectations and acceptable latency.
+  - Non-goals / explicit out-of-scope items.
+  - Decision boundaries OMX may choose without confirmation.
+- Decision-boundary unknowns:
+  - Stack/framework freedom.
+  - Whether OMX can choose transcription engine, animation defaults, or export pipeline.
+  - Whether OMX can prioritize MVP for one creator workflow vs a general-purpose editor.
+- Likely codebase touchpoints:
+  - New desktop app shell.
+  - Video ingestion/transcoding pipeline.
+  - Speech-to-text integration.
+  - Subtitle styling/animation renderer.
+  - Export/output pipeline.
