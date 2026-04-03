@@ -1,0 +1,22 @@
+# Context Snapshot — Social Subtitle Mac App Packaging + Real-Video Test
+
+- Task statement: Package the Social Subtitle Mac App for macOS distribution, add installer/notarization readiness, and test the tool with `testvideo/MCP_SHORT.mp4` using a user-supplied OpenAI API key.
+- Desired outcome: Produce a build/package pipeline for macOS, add notarization-ready configuration and docs, and run a real-video smoke test that exercises transcription and burned-in export.
+- Known facts / evidence:
+  - Existing Electron + React + Remotion app vertical slice already passes lint, build, tests, and architect review.
+  - Current app relies on local `ffmpeg` / `ffprobe` installed on the machine.
+  - Example video exists at `testvideo/MCP_SHORT.mp4`.
+  - A user-supplied OpenAI API key is available for this Ralph run and should be used only ephemerally via environment, not persisted in project files.
+- Constraints:
+  - Must preserve existing MVP scope and working behavior.
+  - Packaging should target macOS distribution and be notarization-ready, but actual notarization may depend on missing Apple credentials.
+  - Do not leak or persist the OpenAI API key in source, artifacts, or logs.
+- Unknowns / open questions:
+  - Whether a fully self-contained ffmpeg strategy is needed now or if packaging readiness can document the system ffmpeg dependency.
+  - Whether current machine has Apple signing credentials installed.
+- Likely codebase touchpoints:
+  - `package.json`
+  - packaging/notarization scripts and config
+  - Electron main/preload process
+  - docs/evidence artifacts
+  - smoke-test scripts

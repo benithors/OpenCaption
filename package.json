@@ -1,0 +1,89 @@
+{
+  "name": "social-subtitle-mac-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "author": "Benjamin Thorstensen",
+  "description": "macOS desktop app for generating styled burned-in subtitles",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "concurrently -k \"vite\" \"npm:dev:electron\"",
+    "dev:electron": "npm run build:electron && wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .",
+    "build": "npm run build:renderer && npm run build:electron && npm run build:remotion",
+    "build:renderer": "vite build",
+    "build:electron": "node scripts/build-electron.mjs",
+    "build:remotion": "node scripts/build-remotion-bundle.mjs",
+    "start": "electron .",
+    "start:smoke": "node scripts/run-real-video-smoke.mjs --mode source",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.node.json",
+    "fixtures:generate": "node scripts/generate-fixtures.mjs",
+    "package:mac:dir": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dir --publish never",
+    "package:mac": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dmg zip --publish never",
+    "package:mac:signed": "npm run build && electron-builder --mac dmg zip --publish never",
+    "package:mac:unsigned": "npm run package:mac",
+    "package:smoke": "node scripts/run-real-video-smoke.mjs --mode packaged",
+    "package:prereqs": "node scripts/check-macos-readiness.mjs",
+    "package:readiness": "node scripts/check-macos-readiness.mjs --strict"
+  },
+  "dependencies": {
+    "@remotion/bundler": "^4.0.366",
+    "@remotion/player": "^4.0.366",
+    "@remotion/renderer": "^4.0.366",
+    "openai": "^5.12.2",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "remotion": "^4.0.366"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.8.0",
+    "@testing-library/react": "^16.3.0",
+    "@electron/notarize": "^3.1.0",
+    "@types/node": "^24.3.0",
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7",
+    "@vitejs/plugin-react": "^5.0.2",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.0.0",
+    "electron": "^41.1.1",
+    "electron-builder": "^26.0.12",
+    "esbuild": "^0.25.9",
+    "jsdom": "^26.1.0",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.3",
+    "vitest": "^3.2.4",
+    "wait-on": "^8.0.5"
+  },
+  "build": {
+    "appId": "com.benithors.socialsubtitlemacapp",
+    "productName": "Social Subtitle Mac App",
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-remotion/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "asar": false,
+    "afterSign": "scripts/notarize.mjs",
+    "mac": {
+      "category": "public.app-category.video",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist"
+    },
+    "dmg": {
+      "sign": false
+    }
+  }
+}

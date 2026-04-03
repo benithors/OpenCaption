@@ -1,0 +1,33 @@
+# Context Snapshot
+
+- Task statement: Plan a feature expansion for the subtitle editor to support five subtitle presentation types, including an emoji-enhanced style, a 2-3-word chunking style, a 1-word chunking style, a TikTok-style font selector, and drag-and-drop subtitle positioning.
+- Desired outcome: A grounded implementation plan that upgrades the current MVP subtitle editor into a preset-driven caption styling workflow suited for social-video creators.
+- Known facts / evidence:
+  - The renderer currently stores a single `SubtitleStyle` object and only exposes font family, font size, bottom safe area, box color, and box opacity controls in `src/renderer/App.tsx:30-150`.
+  - The UI explicitly says animation preset is locked to `pop` in `src/renderer/App.tsx:149`.
+  - Preview currently renders a single bottom-centered subtitle box with a hard-coded CSS animation and no drag interaction in `src/renderer/components/VideoPreview.tsx:75-103` and `src/renderer/styles.css:176-196`.
+  - Remotion export uses the same single active cue approach and a spring-based pop scale effect in `src/remotion/SubtitleComposition.tsx:20-54`.
+  - The shared subtitle contract only supports one animation preset (`'pop'`) and has no layout/preset/font catalog/emoji policy/chunking mode fields in `src/shared/subtitles.ts:8-25`.
+  - Cue generation currently preserves transcript segment boundaries; there is no alternate chunking mode such as 2-3 words or 1 word per cue in `src/shared/subtitles.ts:67-75`.
+  - Style validation is minimal and only covers primitive fields in `src/shared/schema.ts:3-10`.
+  - Existing tests cover the basic import/transcribe/edit/export flow and basic subtitle/style helpers in `src/test/app.test.tsx:37-51`, `src/test/subtitles.test.ts:5-32`, and `src/test/video-preview.test.tsx:6-33`.
+- Constraints:
+  - Reuse the shared subtitle contract so preview and export stay aligned.
+  - No new dependencies unless explicitly justified; prefer pointer events and local utilities over drag libraries.
+  - Keep scope appropriate for the current single-video desktop workflow rather than adding a full timeline editor.
+- Unknowns / open questions:
+  - Whether emoji captions should be auto-generated from keywords, manually selectable, or both.
+  - Whether drag-and-drop should move one global subtitle anchor or support per-cue positioning.
+  - Exact list of the five preset names/styles the user will prefer.
+- Likely codebase touchpoints:
+  - `src/shared/subtitles.ts`
+  - `src/shared/schema.ts`
+  - `src/shared/render.ts`
+  - `src/renderer/App.tsx`
+  - `src/renderer/components/VideoPreview.tsx`
+  - `src/renderer/styles.css`
+  - `src/remotion/SubtitleComposition.tsx`
+  - `src/remotion/types.ts`
+  - `src/test/app.test.tsx`
+  - `src/test/subtitles.test.ts`
+  - `src/test/video-preview.test.tsx`

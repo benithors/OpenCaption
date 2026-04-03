@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "types": ["node"],
+    "noEmit": true
+  },
+  "include": ["src/electron/**/*", "src/shared/**/*", "src/remotion/**/*", "scripts/build-electron.mjs"]
+}
