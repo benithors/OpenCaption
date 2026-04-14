@@ -9,7 +9,14 @@ const bridge: AppBridge = {
   getSavedApiKey: () => ipcRenderer.invoke('settings:get-api-key'),
   saveApiKey: (payload) => ipcRenderer.invoke('settings:save-api-key', payload),
   transcribeVideo: (payload) => ipcRenderer.invoke('transcription:run', payload),
+  onExportProgress: (listener) => {
+    const wrapped = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof listener>[0]) => listener(payload);
+    ipcRenderer.on('export:progress', wrapped);
+    return () => ipcRenderer.removeListener('export:progress', wrapped);
+  },
   exportSubtitledVideo: (payload) => ipcRenderer.invoke('export:video', payload),
+  cancelExport: () => ipcRenderer.invoke('export:cancel'),
+  openContainingFolder: (payload) => ipcRenderer.invoke('export:open-containing-folder', payload),
 };
 
 contextBridge.exposeInMainWorld('appBridge', bridge);

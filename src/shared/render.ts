@@ -34,6 +34,15 @@ export const getSubtitleBoxStyle = (style: SubtitleStyle) => ({
   overflowWrap: 'anywhere' as const,
 });
 
+const scalePreviewLength = (value: number, renderWidth: number) => `calc(${value} * 100cqw / ${Math.max(renderWidth, 1)})`;
+
+export const getPreviewSubtitleBoxStyle = (style: SubtitleStyle, renderWidth: number) => ({
+  ...getSubtitleBoxStyle(style),
+  borderRadius: scalePreviewLength(style.borderRadius, renderWidth),
+  padding: `${scalePreviewLength(style.paddingY, renderWidth)} ${scalePreviewLength(style.paddingX, renderWidth)}`,
+  fontSize: scalePreviewLength(style.fontSize, renderWidth),
+});
+
 export const hexToRgba = (hex: string, opacity: number) => {
   const normalized = hex.replace('#', '');
   const value = normalized.length === 3

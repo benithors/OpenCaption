@@ -5,7 +5,7 @@ import {defaultSubtitleStyle} from '@shared/subtitles';
 
 describe('VideoPreview', () => {
   it('shows the active cue while the video time is within the cue range', () => {
-    render(
+    const {container} = render(
       <VideoPreview
         video={{
           path: '/tmp/video.mp4',
@@ -28,6 +28,7 @@ describe('VideoPreview', () => {
     fireEvent.timeUpdate(video, {target: {currentTime: 0.8}});
     expect(screen.getByText('First')).toBeInTheDocument();
     expect(screen.getByText(/subtitle/)).toBeInTheDocument();
+    expect(container.querySelector('.video-preview-subtitle')?.getAttribute('style')).toMatch(/font-size:\s*calc\([^;]*cqw\);/);
 
     fireEvent.timeUpdate(video, {target: {currentTime: 2.4}});
     expect(screen.getByText('Second')).toBeInTheDocument();

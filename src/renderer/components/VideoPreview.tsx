@@ -1,7 +1,7 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import type {Cue, SubtitleStyle, VideoMetadata, Word} from '@shared/subtitles';
+import type {Cue, SubtitleStyle, VideoMetadata} from '@shared/subtitles';
 import {chunkWords, getActiveChunk, getActiveCue, splitCueIntoWords} from '@shared/subtitles';
-import {getSubtitleBoxStyle} from '@shared/render';
+import {getPreviewSubtitleBoxStyle} from '@shared/render';
 
 type VideoPreviewProps = {
   video: VideoMetadata;
@@ -132,10 +132,9 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({video, cues, style, o
       if (!overlay || !start) return;
 
       const rect = overlay.getBoundingClientRect();
-      // Dragging down = bigger, up = smaller. Scale relative to overlay height.
       const dy = e.clientY - start.mouseY;
-      const scaleFactor = dy / rect.height;
-      const newSize = clamp(Math.round(start.fontSize + scaleFactor * 200), 0, 128);
+      const previewScale = rect.width > 0 ? rect.width / Math.max(video.width, 1) : 1;
+      const newSize = clamp(Math.round(start.fontSize + (dy / Math.max(previewScale, 0.0001))), 0, 128);
 
       onStyleChange({...style, fontSize: newSize});
     };
@@ -151,7 +150,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({video, cues, style, o
       window.removeEventListener('mousemove', handleMove);
       window.removeEventListener('mouseup', handleUp);
     };
-  }, [resizing, onStyleChange, style]);
+  }, [resizing, onStyleChange, style, video.width]);
 
   const chunks = useMemo(() => {
     if (!activeCue) return [];
@@ -164,7 +163,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({video, cues, style, o
   );
 
   const chunkKey = activeChunk ? `${activeChunk[0].startMs}` : '';
-  const boxStyle = getSubtitleBoxStyle(style);
+  const boxStyle = getPreviewSubtitleBoxStyle(style, video.width);
   const interactive = !!onStyleChange;
 
   return (
@@ -192,7 +191,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({video, cues, style, o
               top: `${style.positionY ?? 82}%`,
               transform: 'translate(-50%, -50%)',
               animation: dragging || resizing ? 'none' : 'subtitle-pop 240ms ease-out',
-              boxShadow: '0 24px 50px rgba(0, 0, 0, 0.12)',
+              boxShadow: `0 calc(24 * 100cqw / ${Math.max(video.width, 1)}) calc(50 * 100cqw / ${Math.max(video.width, 1)}) rgba(0, 0, 0, 0.12)`,
               letterSpacing: '-0.03em',
             }}
             onMouseDown={interactive ? handleDragStart : undefined}

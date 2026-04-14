@@ -2,6 +2,7 @@ import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import type {Cue, SubtitleStyle, VideoMetadata} from '@shared/subtitles';
 import {defaultSubtitleStyle, migrateStyle, normalizeSegmentsToCues, updateCueText} from '@shared/subtitles';
 import {validateStyle} from '@shared/schema';
+import type {ExportProgressPayload} from '@shared/ipc';
 import {VideoPreview} from './components/VideoPreview';
 
 const fontWeightOptions = [
@@ -12,6 +13,26 @@ const fontWeightOptions = [
   {value: 800, label: 'Extra Bold'},
   {value: 900, label: 'Black'},
 ];
+
+type ExportModalState = {
+  phase: 'hidden' | 'running' | 'done';
+  stage: ExportProgressPayload['phase'];
+  progress: number;
+  renderedFrames: number;
+  encodedFrames: number;
+  canceling: boolean;
+  outputPath: string | null;
+};
+
+const hiddenExportModal = (): ExportModalState => ({
+  phase: 'hidden',
+  stage: 'preparing',
+  progress: 0,
+  renderedFrames: 0,
+  encodedFrames: 0,
+  canceling: false,
+  outputPath: null,
+});
 
 const StyleBar: React.FC<{style: SubtitleStyle; onChange: (s: SubtitleStyle) => void; errors: string[]}> = ({style, onChange, errors}) => (
   <div className="style-bar">
@@ -74,11 +95,27 @@ export const App: React.FC = () => {
   const [transcriptSource, setTranscriptSource] = useState<'openai' | 'mock' | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [exportModal, setExportModal] = useState<ExportModalState>(hiddenExportModal);
+  const exportCancelRequestedRef = useRef(false);
 
   const phase = !video ? 'empty' : cues.length > 0 ? 'transcribed' : 'loaded';
 
   useEffect(() => {
     window.appBridge.getSavedApiKey().then(setApiKey).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    return window.appBridge.onExportProgress((progress) => {
+      setExportModal((current) => ({
+        phase: 'running',
+        stage: progress.phase,
+        progress: Math.max(current.phase === 'hidden' ? 0 : current.progress, progress.progress),
+        renderedFrames: progress.renderedFrames,
+        encodedFrames: progress.encodedFrames,
+        canceling: current.canceling,
+        outputPath: current.outputPath,
+      }));
+    });
   }, []);
 
   const styleErrors = useMemo(() => validateStyle(style), [style]);
@@ -188,15 +225,34 @@ export const App: React.FC = () => {
   const handleExport = async () => {
     if (!video || cues.length === 0 || styleErrors.length > 0) return;
     setBusy(true);
+    exportCancelRequestedRef.current = false;
+    setExportModal(hiddenExportModal());
     setStatus('Exporting…');
     try {
       const result = await window.appBridge.exportSubtitledVideo({video, cues, style});
       if (!result.canceled && result.outputPath) {
+        const outputPath = result.outputPath;
         setStatus(`Export complete: ${result.outputPath}`);
+        setExportModal((current) => ({
+          phase: 'done',
+          stage: 'muxing',
+          progress: 1,
+          renderedFrames: current.renderedFrames,
+          encodedFrames: current.encodedFrames,
+          canceling: false,
+          outputPath,
+        }));
+      } else {
+        setExportModal(hiddenExportModal());
+        if (exportCancelRequestedRef.current) {
+          setStatus('Export canceled.');
+        }
       }
     } catch (error) {
+      setExportModal(hiddenExportModal());
       setStatus(error instanceof Error ? error.message : String(error));
     } finally {
+      exportCancelRequestedRef.current = false;
       setBusy(false);
     }
   };
@@ -206,6 +262,40 @@ export const App: React.FC = () => {
     await navigator.clipboard.writeText(text);
     setStatus('Transcript copied.');
   };
+
+  const handleOpenContainingFolder = async () => {
+    if (!exportModal.outputPath) return;
+    await window.appBridge.openContainingFolder({path: exportModal.outputPath});
+  };
+
+  const handleCancelExport = async () => {
+    if (exportModal.phase !== 'running' || exportModal.canceling) return;
+    exportCancelRequestedRef.current = true;
+    setExportModal((current) => ({
+      ...current,
+      canceling: true,
+    }));
+    setStatus('Canceling export…');
+
+    try {
+      await window.appBridge.cancelExport();
+    } catch (error) {
+      exportCancelRequestedRef.current = false;
+      setExportModal((current) => ({
+        ...current,
+        canceling: false,
+      }));
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const exportProgressPercent = Math.round(exportModal.progress * 100);
+  const exportStageLabel = exportModal.stage === 'preparing'
+    ? 'Preparing export…'
+    : exportModal.stage === 'muxing'
+      ? 'Finalizing video…'
+      : 'Rendering video…';
+  const exportFilename = exportModal.outputPath?.split('/').pop() ?? null;
 
   return (
     <div
@@ -290,22 +380,16 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {/* Phase: loaded — centered preview + transcribe + style */}
+      {/* Phase: loaded — centered preview + transcribe */}
       {phase === 'loaded' && video && (
         <div className="workspace-center">
-          <div className="preview-with-style">
-            <div className="preview-container">
-              <VideoPreview video={video} cues={cues} style={style} onStyleChange={setStyle} />
-            </div>
-            <StyleBar style={style} onChange={setStyle} errors={styleErrors} />
+          <div className="preview-container">
+            <VideoPreview video={video} cues={cues} style={style} />
           </div>
           <div className="action-bar">
             <button className="btn btn-primary btn-lg" onClick={handleTranscribe} disabled={busy}>
               {busy ? 'Transcribing…' : 'Transcribe'}
             </button>
-            <span className="video-meta">
-              {video.width}×{video.height} · {video.durationSec.toFixed(1)}s
-            </span>
           </div>
         </div>
       )}
@@ -342,6 +426,47 @@ export const App: React.FC = () => {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {exportModal.phase !== 'hidden' && (
+        <div className="modal-backdrop">
+          <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="export-modal-title">
+            <div className="modal-label">Export</div>
+            <h2 id="export-modal-title">
+              {exportModal.phase === 'done' ? 'Export complete' : exportStageLabel}
+            </h2>
+            {exportModal.phase === 'done' ? (
+              <>
+                <p className="modal-copy">
+                  {exportFilename ? `${exportFilename} is ready.` : 'Your video is ready.'}
+                </p>
+                <div className="modal-actions">
+                  <button className="btn btn-sm" onClick={handleOpenContainingFolder}>
+                    Open Containing Folder
+                  </button>
+                  <button className="btn btn-ghost" onClick={() => setExportModal(hiddenExportModal())}>
+                    Close
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="export-progress-track" aria-hidden="true">
+                  <div className="export-progress-fill" style={{width: `${Math.max(2, exportProgressPercent)}%`}} />
+                </div>
+                <div className="export-progress-meta">
+                  <span>{exportProgressPercent}%</span>
+                  <span>{exportModal.encodedFrames > 0 ? `${exportModal.encodedFrames} frames encoded` : `${exportModal.renderedFrames} frames rendered`}</span>
+                </div>
+                <div className="modal-actions">
+                  <button className="btn btn-ghost" onClick={handleCancelExport} disabled={exportModal.canceling}>
+                    {exportModal.canceling ? 'Canceling…' : 'Cancel Render'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

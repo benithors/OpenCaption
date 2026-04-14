@@ -1,13 +1,15 @@
-import {app, BrowserWindow, dialog, ipcMain, safeStorage} from 'electron';
+import {app, BrowserWindow, dialog, ipcMain, safeStorage, shell} from 'electron';
 import {randomUUID} from 'node:crypto';
-import {mkdir, writeFile} from 'node:fs/promises';
+import {mkdir, rm, writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import http from 'node:http';
 import fs from 'node:fs';
+import {makeCancelSignal} from '@remotion/renderer';
 import {loadSettings, saveSettings} from './settings-store';
 import {probeVideo} from './ffmpeg';
 import {transcribeVideo} from './transcription';
 import {exportSubtitledVideo} from './export-video';
+import {getDefaultExportPath} from './export-path';
 import type {SaveApiKeyPayload, SubtitleExportPayload} from '@shared/ipc';
 import type {SettingsDocument} from './settings-store';
 import {defaultSubtitleStyle, normalizeSegmentsToCues} from '@shared/subtitles';
@@ -15,6 +17,7 @@ import {defaultSubtitleStyle, normalizeSegmentsToCues} from '@shared/subtitles';
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 let staticServerUrl: string | null = null;
 const previewVideoRegistry = new Map<string, string>();
+const activeExports = new Map<number, {cancel: () => void; canceled: boolean; outputPath: string}>();
 
 const settingsPath = () => path.join(app.getPath('userData'), 'settings.json');
 
@@ -291,10 +294,15 @@ const registerHandlers = () => {
     return transcribeVideo(payload.videoPath, {apiKey: payload.apiKey || getStoredApiKey(settings)});
   });
 
-  ipcMain.handle('export:video', async (_event, payload: SubtitleExportPayload) => {
+  ipcMain.handle('export:video', async (event, payload: SubtitleExportPayload) => {
+    if (activeExports.has(event.sender.id)) {
+      throw new Error('An export is already in progress.');
+    }
+
+    const currentSettings = await loadSettings(settingsPath());
     const result = await dialog.showSaveDialog({
       title: 'Export subtitled video',
-      defaultPath: path.join(app.getPath('documents'), 'subtitled-video.mp4'),
+      defaultPath: getDefaultExportPath(payload.video.path, currentSettings.lastExportDirectory, app.getPath('documents')),
       filters: [{name: 'MP4 Video', extensions: ['mp4']}],
     });
 
@@ -302,14 +310,57 @@ const registerHandlers = () => {
       return {canceled: true};
     }
 
-    await exportSubtitledVideo({
-      video: payload.video,
-      cues: payload.cues,
-      style: payload.style,
+    const exportControl = {
+      ...makeCancelSignal(),
+      canceled: false,
       outputPath: result.filePath,
-    });
+    };
+    activeExports.set(event.sender.id, exportControl);
 
-    return {canceled: false, outputPath: result.filePath};
+    try {
+      await exportSubtitledVideo({
+        video: payload.video,
+        cues: payload.cues,
+        style: payload.style,
+        outputPath: result.filePath,
+        cancelSignal: exportControl.cancelSignal,
+        onProgress: (progress) => {
+          event.sender.send('export:progress', progress);
+        },
+      });
+
+      if (exportControl.canceled) {
+        await rm(result.filePath, {force: true});
+        return {canceled: true};
+      }
+
+      currentSettings.lastExportDirectory = path.dirname(result.filePath);
+      await saveSettings(settingsPath(), currentSettings);
+      return {canceled: false, outputPath: result.filePath};
+    } catch (error) {
+      if (exportControl.canceled) {
+        await rm(result.filePath, {force: true}).catch(() => undefined);
+        return {canceled: true};
+      }
+
+      throw error;
+    } finally {
+      activeExports.delete(event.sender.id);
+    }
+  });
+
+  ipcMain.handle('export:cancel', async (event) => {
+    const activeExport = activeExports.get(event.sender.id);
+    if (!activeExport) {
+      return;
+    }
+
+    activeExport.canceled = true;
+    activeExport.cancel();
+  });
+
+  ipcMain.handle('export:open-containing-folder', async (_event, payload: {path: string}) => {
+    shell.showItemInFolder(payload.path);
   });
 };
 

@@ -15,6 +15,13 @@ export type SubtitleExportPayload = {
   style: SubtitleStyle;
 };
 
+export type ExportProgressPayload = {
+  phase: 'preparing' | 'rendering' | 'muxing';
+  progress: number;
+  renderedFrames: number;
+  encodedFrames: number;
+};
+
 export type SubtitleExportResponse = {
   canceled: boolean;
   outputPath?: string;
@@ -28,5 +35,8 @@ export type AppBridge = {
   getSavedApiKey: () => Promise<string>;
   saveApiKey: (payload: SaveApiKeyPayload) => Promise<void>;
   transcribeVideo: (payload: {videoPath: string; apiKey?: string}) => Promise<TranscriptionResult>;
+  onExportProgress: (listener: (payload: ExportProgressPayload) => void) => () => void;
   exportSubtitledVideo: (payload: SubtitleExportPayload) => Promise<SubtitleExportResponse>;
+  cancelExport: () => Promise<void>;
+  openContainingFolder: (payload: {path: string}) => Promise<void>;
 };

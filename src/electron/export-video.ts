@@ -4,9 +4,11 @@ import fs from 'node:fs';
 import {stat} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {renderMedia, selectComposition} from '@remotion/renderer';
+import type {CancelSignal} from '@remotion/renderer';
 import {bundle} from '@remotion/bundler';
 import type {Cue, SubtitleStyle, VideoMetadata} from '@shared/subtitles';
 import {defaultCompositionSize, getVideoDurationInFrames} from '@shared/render';
+import type {ExportProgressPayload} from '@shared/ipc';
 
 const entryPoint = path.resolve(process.cwd(), 'src/remotion/index.ts');
 let cachedServeUrl: string | null = null;
@@ -39,6 +41,8 @@ export type ExportPayload = {
   cues: Cue[];
   style: SubtitleStyle;
   outputPath: string;
+  onProgress?: (payload: ExportProgressPayload) => void;
+  cancelSignal?: CancelSignal;
 };
 
 const mimeTypeForPath = (videoPath: string) => {
@@ -104,8 +108,15 @@ const withServedVideoUrl = async <T>(videoPath: string, callback: (videoUrl: str
   }
 };
 
-export const exportSubtitledVideo = async ({video, cues, style, outputPath}: ExportPayload) => {
+export const exportSubtitledVideo = async ({video, cues, style, outputPath, onProgress, cancelSignal}: ExportPayload) => {
   const serveUrl = await ensureBundle();
+  onProgress?.({
+    phase: 'preparing',
+    progress: 0,
+    renderedFrames: 0,
+    encodedFrames: 0,
+  });
+
   await withServedVideoUrl(video.path, async (videoUrl) => {
     const inputProps = {
       mode: 'render' as const,
@@ -130,6 +141,15 @@ export const exportSubtitledVideo = async ({video, cues, style, outputPath}: Exp
       composition,
       inputProps,
       outputLocation: outputPath,
+      cancelSignal,
+      onProgress: (progress) => {
+        onProgress?.({
+          phase: progress.stitchStage === 'muxing' ? 'muxing' : 'rendering',
+          progress: progress.progress,
+          renderedFrames: progress.renderedFrames,
+          encodedFrames: progress.encodedFrames,
+        });
+      },
       chromiumOptions: {
         disableWebSecurity: false,
       },

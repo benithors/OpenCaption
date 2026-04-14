@@ -1,7 +1,8 @@
-import {fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {beforeEach, describe, expect, it, vi} from 'vitest';
 import {App} from '@renderer/App';
 import {mockTranscriptionResult} from '@shared/mock';
+import type {ExportProgressPayload} from '@shared/ipc';
 
 vi.mock('@remotion/player', () => ({
   Player: () => <div data-testid="mock-player">player</div>,
@@ -15,17 +16,25 @@ const bridge = {
   getSavedApiKey: vi.fn(),
   saveApiKey: vi.fn(),
   transcribeVideo: vi.fn(),
+  onExportProgress: vi.fn(),
   exportSubtitledVideo: vi.fn(),
+  cancelExport: vi.fn(),
+  openContainingFolder: vi.fn(),
 };
 
 describe('App', () => {
+  let exportProgressListener: ((payload: ExportProgressPayload) => void) | null = null;
+
   beforeEach(() => {
     bridge.importVideo.mockReset();
     bridge.getPreviewVideoUrl.mockReset();
     bridge.getSavedApiKey.mockReset();
     bridge.saveApiKey.mockReset();
     bridge.transcribeVideo.mockReset();
+    bridge.onExportProgress.mockReset();
     bridge.exportSubtitledVideo.mockReset();
+    bridge.cancelExport.mockReset();
+    bridge.openContainingFolder.mockReset();
     bridge.getSavedApiKey.mockResolvedValue('');
     bridge.importVideo.mockResolvedValue({
       canceled: false,
@@ -33,14 +42,36 @@ describe('App', () => {
     });
     bridge.transcribeVideo.mockResolvedValue(mockTranscriptionResult());
     bridge.exportSubtitledVideo.mockResolvedValue({canceled: false, outputPath: '/tmp/export.mp4'});
+    bridge.onExportProgress.mockImplementation((listener) => {
+      exportProgressListener = listener;
+      return () => {
+        if (exportProgressListener === listener) {
+          exportProgressListener = null;
+        }
+      };
+    });
+    bridge.cancelExport.mockResolvedValue(undefined);
+    bridge.openContainingFolder.mockResolvedValue(undefined);
     window.appBridge = bridge;
   });
 
   it('imports, transcribes, edits, and exports in the UI flow', async () => {
+    let resolveExport: ((value: {canceled: boolean; outputPath?: string}) => void) | null = null;
+    bridge.exportSubtitledVideo.mockImplementation(() => new Promise((resolve) => {
+      exportProgressListener?.({
+        phase: 'rendering',
+        progress: 0.42,
+        renderedFrames: 126,
+        encodedFrames: 0,
+      });
+      resolveExport = resolve;
+    }));
+
     render(<App />);
 
     fireEvent.click(screen.getByText(/Drop a video here/));
-    await screen.findByText(/1080×1920/);
+    await screen.findByText('Transcribe');
+    expect(screen.queryByText('Font')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByText('Transcribe'));
     await screen.findByDisplayValue('Hello from the subtitle app.');
@@ -49,6 +80,53 @@ describe('App', () => {
     fireEvent.click(screen.getByText('Export MP4'));
 
     await waitFor(() => expect(bridge.exportSubtitledVideo).toHaveBeenCalled());
-    expect(await screen.findByText(/Export complete/)).toBeInTheDocument();
+    expect(await screen.findByText('Rendering video…')).toBeInTheDocument();
+    expect(screen.getByText('42%')).toBeInTheDocument();
+    expect(screen.getByText('126 frames rendered')).toBeInTheDocument();
+
+    await act(async () => {
+      resolveExport?.({canceled: false, outputPath: '/tmp/export.mp4'});
+    });
+
+    expect(await screen.findByRole('heading', {name: 'Export complete'})).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Open Containing Folder'));
+    await waitFor(() => expect(bridge.openContainingFolder).toHaveBeenCalledWith({path: '/tmp/export.mp4'}));
+  });
+
+  it('allows canceling an in-flight export', async () => {
+    let resolveExport: ((value: {canceled: boolean; outputPath?: string}) => void) | null = null;
+    bridge.exportSubtitledVideo.mockImplementation(() => new Promise((resolve) => {
+      exportProgressListener?.({
+        phase: 'rendering',
+        progress: 0.42,
+        renderedFrames: 126,
+        encodedFrames: 0,
+      });
+      resolveExport = resolve;
+    }));
+
+    render(<App />);
+
+    fireEvent.click(screen.getByText(/Drop a video here/));
+    await screen.findByText('Transcribe');
+    expect(screen.queryByText('Font')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Transcribe'));
+    await screen.findByDisplayValue('Hello from the subtitle app.');
+
+    fireEvent.click(screen.getByText('Export MP4'));
+
+    expect(await screen.findByText('Cancel Render')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Cancel Render'));
+
+    await waitFor(() => expect(bridge.cancelExport).toHaveBeenCalled());
+    expect(screen.getByText('Canceling…')).toBeInTheDocument();
+
+    await act(async () => {
+      resolveExport?.({canceled: true});
+    });
+
+    await waitFor(() => expect(screen.queryByText('Cancel Render')).not.toBeInTheDocument());
+    expect(screen.getByText('Export canceled.')).toBeInTheDocument();
   });
 });

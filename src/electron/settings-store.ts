@@ -4,6 +4,7 @@ import path from 'node:path';
 export type SettingsDocument = {
   apiKeyPlaintext?: string;
   apiKeyCiphertextBase64?: string;
+  lastExportDirectory?: string;
 };
 
 const ensureDir = async (filePath: string) => {
