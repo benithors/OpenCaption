@@ -22,6 +22,8 @@ export type SubtitleExportResponse = {
 
 export type AppBridge = {
   importVideo: () => Promise<ImportVideoResponse>;
+  importVideoFromPath: (filePath: string) => Promise<ImportVideoResponse>;
+  getPathForFile: (file: File) => string;
   getPreviewVideoUrl: (videoPath: string) => Promise<string>;
   getSavedApiKey: () => Promise<string>;
   saveApiKey: (payload: SaveApiKeyPayload) => Promise<void>;

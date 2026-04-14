@@ -9,6 +9,8 @@ vi.mock('@remotion/player', () => ({
 
 const bridge = {
   importVideo: vi.fn(),
+  importVideoFromPath: vi.fn(),
+  getPathForFile: vi.fn(() => '/tmp/video.mp4'),
   getPreviewVideoUrl: vi.fn(),
   getSavedApiKey: vi.fn(),
   saveApiKey: vi.fn(),
@@ -37,13 +39,13 @@ describe('App', () => {
   it('imports, transcribes, edits, and exports in the UI flow', async () => {
     render(<App />);
 
-    fireEvent.click(screen.getByText('Import video'));
+    fireEvent.click(screen.getByText(/Drop a video here/));
     await screen.findByText(/1080×1920/);
 
-    fireEvent.click(screen.getByText('Run transcription'));
+    fireEvent.click(screen.getByText('Transcribe'));
     await screen.findByDisplayValue('Hello from the subtitle app.');
 
-    fireEvent.change(screen.getAllByRole('textbox')[1], {target: {value: 'Edited caption text'}});
+    fireEvent.change(screen.getAllByRole('textbox')[0], {target: {value: 'Edited caption text'}});
     fireEvent.click(screen.getByText('Export MP4'));
 
     await waitFor(() => expect(bridge.exportSubtitledVideo).toHaveBeenCalled());

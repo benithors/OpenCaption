@@ -27,7 +27,7 @@ export const getSubtitleBoxStyle = (style: SubtitleStyle) => ({
   fontWeight: style.fontWeight,
   lineHeight: 1.08,
   textAlign: style.textAlign,
-  maxWidth: `calc(100% - ${style.safeAreaX * 2}px)`,
+  maxWidth: `${style.maxWidth}%`,
   boxSizing: 'border-box' as const,
   whiteSpace: 'pre-wrap' as const,
   wordBreak: 'break-word' as const,

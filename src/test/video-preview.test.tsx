@@ -26,9 +26,10 @@ describe('VideoPreview', () => {
 
     const video = document.querySelector('video') as HTMLVideoElement;
     fireEvent.timeUpdate(video, {target: {currentTime: 0.8}});
-    expect(screen.getByText('First subtitle')).toBeInTheDocument();
+    expect(screen.getByText('First')).toBeInTheDocument();
+    expect(screen.getByText(/subtitle/)).toBeInTheDocument();
 
     fireEvent.timeUpdate(video, {target: {currentTime: 2.4}});
-    expect(screen.getByText('Second subtitle')).toBeInTheDocument();
+    expect(screen.getByText('Second')).toBeInTheDocument();
   });
 });

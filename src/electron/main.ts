@@ -57,7 +57,7 @@ const runSmokeModeIfConfigured = async () => {
     const video = await probeVideo(inputPath);
     const startedAt = Date.now();
     const transcription = await transcribeVideo(inputPath, {apiKey});
-    const cues = normalizeSegmentsToCues(transcription.segments);
+    const cues = normalizeSegmentsToCues(transcription.segments, transcription.words);
     const exportLocation = await exportSubtitledVideo({
       video,
       cues,
@@ -256,6 +256,17 @@ const registerHandlers = () => {
     }
 
     const video = await probeVideo(result.filePaths[0]);
+    video.previewUrl = await registerPreviewVideo(video.path);
+    return {canceled: false, video};
+  });
+
+  ipcMain.handle('video:import-path', async (_event, payload: {filePath: string}) => {
+    const ext = path.extname(payload.filePath).toLowerCase();
+    if (!['.mp4', '.mov'].includes(ext)) {
+      throw new Error('Unsupported file type. Please drop an MP4 or MOV file.');
+    }
+
+    const video = await probeVideo(payload.filePath);
     video.previewUrl = await registerPreviewVideo(video.path);
     return {canceled: false, video};
   });
