@@ -1,7 +1,7 @@
 import React from 'react';
 import {AbsoluteFill, Html5Video, OffthreadVideo, interpolate, spring, useCurrentFrame, useVideoConfig} from 'remotion';
 import {chunkWords, getActiveChunk, getActiveCue, splitCueIntoWords} from '../shared/subtitles';
-import {getSubtitleBoxStyle, hexToRgba} from '../shared/render';
+import {getSubtitleBoxStyle, getSubtitleShadow, hexToRgba} from '../shared/render';
 import type {SubtitleCompositionProps} from './types';
 
 export const SubtitleComposition: React.FC<SubtitleCompositionProps> = ({
@@ -48,7 +48,7 @@ export const SubtitleComposition: React.FC<SubtitleCompositionProps> = ({
               left: `${style.positionX}%`,
               top: `${style.positionY}%`,
               transform: `translate(-50%, -50%) scale(${interpolate(activeScale, [0, 1], [0.95, 1])})`,
-              boxShadow: '0 24px 50px rgba(0, 0, 0, 0.35)',
+              boxShadow: getSubtitleShadow(),
               letterSpacing: '-0.03em',
             }}
           >

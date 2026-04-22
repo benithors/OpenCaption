@@ -93,13 +93,6 @@ export const normalizeCueText = (text: string) =>
 
 const splitCueText = (text: string) => normalizeCueText(text).split(/\s+/).filter(Boolean);
 
-const normalizeWordToken = (text: string) =>
-  normalizeCueText(text)
-    .toLowerCase()
-    .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
-
-const segmentWordSlackMs = 220;
-
 const syntheticWordsFromText = (text: string, startMs: number, endMs: number): Word[] => {
   const words = splitCueText(text);
   if (words.length === 0) return [];
@@ -120,80 +113,183 @@ const normalizeTranscriptWords = (words: TranscriptWord[]): Word[] =>
       text: normalizeCueText(word.word),
       startMs: Math.max(0, Math.round(word.start * 1000)),
       endMs: Math.max(Math.round(word.end * 1000), Math.round(word.start * 1000) + 1),
-    }));
+    }))
+    .filter((word) => word.text.length > 0);
 
-const getCandidateWordsForSegment = (words: Word[], startSec: number, endSec: number): Word[] => {
-  const startMs = Math.max(0, Math.round(startSec * 1000));
-  const endMs = Math.max(Math.round(endSec * 1000), startMs + 1);
+const normalizeWordToken = (text: string) =>
+  normalizeCueText(text)
+    .toLowerCase()
+    .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
 
-  return words.filter((word) => {
-    return word.endMs >= startMs - segmentWordSlackMs && word.startMs <= endMs + segmentWordSlackMs;
-  });
+const splitSentenceText = (text: string) => normalizeCueText(text).split(/(?<=[.!?])\s+/).filter(Boolean);
+
+const segmentWordSlackMs = 220;
+
+type TimedSegment = {
+  id: string;
+  startMs: number;
+  endMs: number;
+  text: string;
 };
 
-const alignCueWordsToTranscriptWords = (text: string, candidateWords: Word[]): Word[] | null => {
-  const displayWords = splitCueText(text);
-  if (displayWords.length === 0) return [];
+const buildCuesFromAlignedWords = (
+  displayWords: string[],
+  timedWords: Word[],
+  startIndex: number,
+  maxWords = 4,
+  maxChars = 20,
+  pauseThresholdMs = 520,
+): Cue[] => {
+  const cues: Cue[] = [];
+  let currentDisplayWords: string[] = [];
+  let currentTimedWords: Word[] = [];
+  let charCount = 0;
 
-  const cueTokens = displayWords.map(normalizeWordToken);
-  const candidateTokens = candidateWords.map((word) => normalizeWordToken(word.text));
-  const cueCount = cueTokens.length;
-  const candidateCount = candidateTokens.length;
+  const flush = () => {
+    if (currentDisplayWords.length === 0 || currentTimedWords.length === 0) return;
+    cues.push({
+      id: String(startIndex + cues.length),
+      startMs: currentTimedWords[0].startMs,
+      endMs: Math.max(currentTimedWords[currentTimedWords.length - 1].endMs, currentTimedWords[0].startMs + 1),
+      text: normalizeCueText(currentDisplayWords.join(' ')),
+      words: [...currentTimedWords],
+      wordTimingSource: 'timed',
+    });
+    currentDisplayWords = [];
+    currentTimedWords = [];
+    charCount = 0;
+  };
 
-  if (candidateCount < cueCount) return null;
+  for (let index = 0; index < displayWords.length; index += 1) {
+    const displayWord = displayWords[index];
+    const timedWord = timedWords[index];
+    const previousWord = currentTimedWords[currentTimedWords.length - 1];
+    const addedChars = charCount + (currentDisplayWords.length > 0 ? 1 : 0) + displayWord.length;
+    const exceedsWordLimit = currentDisplayWords.length >= maxWords;
+    const exceedsCharLimit = currentDisplayWords.length > 0 && addedChars > maxChars;
+    const exceedsPauseLimit = previousWord ? timedWord.startMs - previousWord.endMs > pauseThresholdMs : false;
 
-  const cost = Array.from({length: cueCount}, () => Array(candidateCount).fill(Number.POSITIVE_INFINITY));
-  const previous = Array.from({length: cueCount}, () => Array(candidateCount).fill(-1));
+    if (currentDisplayWords.length > 0 && (exceedsWordLimit || exceedsCharLimit || exceedsPauseLimit)) {
+      flush();
+    }
 
-  for (let candidateIndex = 0; candidateIndex < candidateCount; candidateIndex += 1) {
-    if (candidateTokens[candidateIndex] === cueTokens[0]) {
-      cost[0][candidateIndex] = candidateIndex;
+    currentDisplayWords.push(displayWord);
+    currentTimedWords.push(timedWord);
+    charCount = charCount === 0 ? displayWord.length : charCount + 1 + displayWord.length;
+  }
+
+  flush();
+  return cues;
+};
+
+const buildCuesFromTranscriptWords = (words: Word[], startIndex = 0): Cue[] =>
+  buildCuesFromAlignedWords(
+    words.map((word) => word.text),
+    words,
+    startIndex,
+  );
+
+const buildCuesFromSegmentText = (segmentText: string, timedWords: Word[], startIndex: number): Cue[] => {
+  const sentenceTexts = splitSentenceText(segmentText);
+  if (sentenceTexts.length === 0) {
+    return buildCuesFromTranscriptWords(timedWords, startIndex);
+  }
+
+  const cues: Cue[] = [];
+  let timedWordOffset = 0;
+  let cueIndex = startIndex;
+
+  for (const sentenceText of sentenceTexts) {
+    const displayWords = splitCueText(sentenceText);
+    const sentenceTimedWords = timedWords.slice(timedWordOffset, timedWordOffset + displayWords.length);
+    const wordsAlign = sentenceTimedWords.length === displayWords.length
+      && displayWords.every((displayWord, index) => normalizeWordToken(displayWord) === normalizeWordToken(sentenceTimedWords[index].text));
+
+    if (!wordsAlign) {
+      return buildCuesFromTranscriptWords(timedWords, startIndex);
+    }
+
+    const sentenceCues = buildCuesFromAlignedWords(displayWords, sentenceTimedWords, cueIndex);
+    cues.push(...sentenceCues);
+    cueIndex += sentenceCues.length;
+    timedWordOffset += displayWords.length;
+  }
+
+  if (timedWordOffset !== timedWords.length) {
+    return buildCuesFromTranscriptWords(timedWords, startIndex);
+  }
+
+  return cues;
+};
+
+const findSegmentIndexForWord = (segments: TimedSegment[], word: Word): number => {
+  const midpointMs = (word.startMs + word.endMs) / 2;
+  let bestIndex = -1;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (const [index, segment] of segments.entries()) {
+    if (midpointMs < segment.startMs - segmentWordSlackMs || midpointMs > segment.endMs + segmentWordSlackMs) {
+      continue;
+    }
+
+    const distance = midpointMs < segment.startMs
+      ? segment.startMs - midpointMs
+      : midpointMs > segment.endMs
+        ? midpointMs - segment.endMs
+        : 0;
+
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = index;
     }
   }
 
-  for (let cueIndex = 1; cueIndex < cueCount; cueIndex += 1) {
-    for (let candidateIndex = cueIndex; candidateIndex < candidateCount; candidateIndex += 1) {
-      if (candidateTokens[candidateIndex] !== cueTokens[cueIndex]) continue;
+  if (bestIndex !== -1) {
+    return bestIndex;
+  }
 
-      for (let previousIndex = cueIndex - 1; previousIndex < candidateIndex; previousIndex += 1) {
-        if (!Number.isFinite(cost[cueIndex - 1][previousIndex])) continue;
+  return segments.reduce((closestIndex, segment, index) => {
+    const segmentMidpointMs = (segment.startMs + segment.endMs) / 2;
+    const closestMidpointMs = (segments[closestIndex].startMs + segments[closestIndex].endMs) / 2;
+    return Math.abs(midpointMs - segmentMidpointMs) < Math.abs(midpointMs - closestMidpointMs) ? index : closestIndex;
+  }, 0);
+};
 
-        const nextCost = cost[cueIndex - 1][previousIndex] + (candidateIndex - previousIndex - 1);
-        if (nextCost < cost[cueIndex][candidateIndex]) {
-          cost[cueIndex][candidateIndex] = nextCost;
-          previous[cueIndex][candidateIndex] = previousIndex;
-        }
-      }
+const buildTimedCuesFromSegments = (segments: TranscriptSegment[], words: Word[]): Cue[] => {
+  const normalizedSegments: TimedSegment[] = segments
+    .filter((segment) => Number.isFinite(segment.start) && Number.isFinite(segment.end) && segment.text.trim())
+    .map((segment, index) => ({
+      id: String(segment.id ?? index),
+      startMs: Math.max(0, Math.round(segment.start * 1000)),
+      endMs: Math.max(Math.round(segment.end * 1000), Math.round(segment.start * 1000) + 1),
+      text: normalizeCueText(segment.text),
+    }));
+
+  if (normalizedSegments.length === 0) {
+    return buildCuesFromTranscriptWords(words);
+  }
+
+  const wordsBySegment = normalizedSegments.map(() => [] as Word[]);
+  for (const word of words) {
+    const segmentIndex = findSegmentIndexForWord(normalizedSegments, word);
+    wordsBySegment[segmentIndex].push(word);
+  }
+
+  const cues: Cue[] = [];
+  let cueIndex = 0;
+
+  for (const [segmentIndex, segment] of normalizedSegments.entries()) {
+    const timedWords = wordsBySegment[segmentIndex];
+    if (timedWords.length === 0) {
+      continue;
     }
+
+    const segmentCues = buildCuesFromSegmentText(segment.text, timedWords, cueIndex);
+    cues.push(...segmentCues);
+    cueIndex += segmentCues.length;
   }
 
-  let bestEndIndex = -1;
-  let bestCost = Number.POSITIVE_INFINITY;
-
-  for (let candidateIndex = cueCount - 1; candidateIndex < candidateCount; candidateIndex += 1) {
-    if (cost[cueCount - 1][candidateIndex] < bestCost) {
-      bestCost = cost[cueCount - 1][candidateIndex];
-      bestEndIndex = candidateIndex;
-    }
-  }
-
-  if (bestEndIndex === -1 || !Number.isFinite(bestCost)) {
-    return null;
-  }
-
-  const matchedIndexes = Array(cueCount).fill(-1);
-  let currentIndex = bestEndIndex;
-
-  for (let cueIndex = cueCount - 1; cueIndex >= 0; cueIndex -= 1) {
-    matchedIndexes[cueIndex] = currentIndex;
-    currentIndex = previous[cueIndex][currentIndex];
-  }
-
-  return displayWords.map((displayText, cueIndex) => ({
-    text: displayText,
-    startMs: candidateWords[matchedIndexes[cueIndex]].startMs,
-    endMs: candidateWords[matchedIndexes[cueIndex]].endMs,
-  }));
+  return cues.length > 0 ? cues : buildCuesFromTranscriptWords(words);
 };
 
 const retimeWordsToCueText = (text: string, timedWords: Word[] | undefined, startMs: number, endMs: number): Word[] => {
@@ -208,31 +304,28 @@ const retimeWordsToCueText = (text: string, timedWords: Word[] | undefined, star
     }));
   }
 
+  if (timedWords && timedWords.length > 0) {
+    return [{text: normalizeCueText(text), startMs, endMs}];
+  }
+
   return syntheticWordsFromText(text, startMs, endMs);
 };
 
 export const normalizeSegmentsToCues = (segments: TranscriptSegment[], transcriptWords: TranscriptWord[] = []): Cue[] => {
   const normalizedTranscriptWords = normalizeTranscriptWords(transcriptWords);
-  const hasTranscriptWords = normalizedTranscriptWords.length > 0;
+  if (normalizedTranscriptWords.length > 0) {
+    return buildTimedCuesFromSegments(segments, normalizedTranscriptWords);
+  }
 
   return segments
     .filter((segment) => Number.isFinite(segment.start) && Number.isFinite(segment.end) && segment.text.trim())
-    .map((segment, index) => {
-      const startMs = Math.max(0, Math.round(segment.start * 1000));
-      const endMs = Math.max(Math.round(segment.end * 1000), Math.round(segment.start * 1000) + 350);
-      const text = normalizeCueText(segment.text);
-      const candidateWords = getCandidateWordsForSegment(normalizedTranscriptWords, segment.start, segment.end);
-      const alignedWords = hasTranscriptWords ? alignCueWordsToTranscriptWords(text, candidateWords) : null;
-
-      return {
-        id: String(segment.id ?? index),
-        startMs,
-        endMs,
-        text,
-        words: alignedWords ?? undefined,
-        wordTimingSource: hasTranscriptWords ? (alignedWords ? 'timed' : 'cue') : 'synthetic',
-      };
-    });
+    .map((segment, index) => ({
+      id: String(segment.id ?? index),
+      startMs: Math.max(0, Math.round(segment.start * 1000)),
+      endMs: Math.max(Math.round(segment.end * 1000), Math.round(segment.start * 1000) + 350),
+      text: normalizeCueText(segment.text),
+      wordTimingSource: 'synthetic',
+    }));
 };
 
 export const updateCueText = (cues: Cue[], cueId: string, text: string): Cue[] =>

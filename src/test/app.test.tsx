@@ -74,7 +74,7 @@ describe('App', () => {
     expect(screen.queryByText('Font')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByText('Transcribe'));
-    await screen.findByDisplayValue('Hello from the subtitle app.');
+    await screen.findByDisplayValue('Hello from the');
 
     fireEvent.change(screen.getAllByRole('textbox')[0], {target: {value: 'Edited caption text'}});
     fireEvent.click(screen.getByText('Export MP4'));
@@ -112,7 +112,7 @@ describe('App', () => {
     expect(screen.queryByText('Font')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByText('Transcribe'));
-    await screen.findByDisplayValue('Hello from the subtitle app.');
+    await screen.findByDisplayValue('Hello from the');
 
     fireEvent.click(screen.getByText('Export MP4'));
 

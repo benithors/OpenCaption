@@ -17,13 +17,15 @@ export const defaultCompositionSize = {
 
 export const getVideoDurationInFrames = (durationSec: number, fps: number) => Math.max(1, Math.ceil(durationSec * fps));
 
-export const getSubtitleBoxStyle = (style: SubtitleStyle) => ({
+const scaleLength = (value: number, scale: number) => `${value * scale}px`;
+
+export const getSubtitleBoxStyle = (style: SubtitleStyle, scale = 1) => ({
   color: style.textColor,
   backgroundColor: hexToRgba(style.boxColor, style.boxOpacity),
-  borderRadius: style.borderRadius,
-  padding: `${style.paddingY}px ${style.paddingX}px`,
+  borderRadius: scaleLength(style.borderRadius, scale),
+  padding: `${scaleLength(style.paddingY, scale)} ${scaleLength(style.paddingX, scale)}`,
   fontFamily: style.fontFamily,
-  fontSize: style.fontSize,
+  fontSize: scaleLength(style.fontSize, scale),
   fontWeight: style.fontWeight,
   lineHeight: 1.08,
   textAlign: style.textAlign,
@@ -34,14 +36,8 @@ export const getSubtitleBoxStyle = (style: SubtitleStyle) => ({
   overflowWrap: 'anywhere' as const,
 });
 
-const scalePreviewLength = (value: number, renderWidth: number) => `calc(${value} * 100cqw / ${Math.max(renderWidth, 1)})`;
-
-export const getPreviewSubtitleBoxStyle = (style: SubtitleStyle, renderWidth: number) => ({
-  ...getSubtitleBoxStyle(style),
-  borderRadius: scalePreviewLength(style.borderRadius, renderWidth),
-  padding: `${scalePreviewLength(style.paddingY, renderWidth)} ${scalePreviewLength(style.paddingX, renderWidth)}`,
-  fontSize: scalePreviewLength(style.fontSize, renderWidth),
-});
+export const getSubtitleShadow = (scale = 1, opacity = 0.35) =>
+  `0 ${24 * scale}px ${50 * scale}px rgba(0, 0, 0, ${opacity})`;
 
 export const hexToRgba = (hex: string, opacity: number) => {
   const normalized = hex.replace('#', '');

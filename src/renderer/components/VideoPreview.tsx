@@ -1,7 +1,7 @@
-import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import type {Cue, SubtitleStyle, VideoMetadata} from '@shared/subtitles';
 import {chunkWords, getActiveChunk, getActiveCue, splitCueIntoWords} from '@shared/subtitles';
-import {getPreviewSubtitleBoxStyle} from '@shared/render';
+import {getSubtitleBoxStyle, getSubtitleShadow} from '@shared/render';
 
 type VideoPreviewProps = {
   video: VideoMetadata;
@@ -16,7 +16,30 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({video, cues, style, o
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const [currentMs, setCurrentMs] = useState(0);
+  const [previewScale, setPreviewScale] = useState(1);
   const activeCue = useMemo(() => getActiveCue(cues, currentMs), [cues, currentMs]);
+
+  useLayoutEffect(() => {
+    const overlay = overlayRef.current;
+    if (!overlay) return;
+
+    const updateScale = () => {
+      const width = overlay.clientWidth;
+      setPreviewScale(width > 0 ? width / Math.max(video.width, 1) : 1);
+    };
+
+    updateScale();
+
+    const ResizeObserverCtor = window.ResizeObserver;
+    const resizeObserver = ResizeObserverCtor ? new ResizeObserverCtor(() => updateScale()) : null;
+    resizeObserver?.observe(overlay);
+    window.addEventListener('resize', updateScale);
+
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', updateScale);
+    };
+  }, [video.width]);
 
   // Drag state
   const [dragging, setDragging] = useState(false);
@@ -163,7 +186,10 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({video, cues, style, o
   );
 
   const chunkKey = activeChunk ? `${activeChunk[0].startMs}` : '';
-  const boxStyle = getPreviewSubtitleBoxStyle(style, video.width);
+  const boxStyle = useMemo(
+    () => getSubtitleBoxStyle(style, Number.isFinite(previewScale) && previewScale > 0 ? previewScale : 1),
+    [previewScale, style],
+  );
   const interactive = !!onStyleChange;
 
   return (
@@ -191,7 +217,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({video, cues, style, o
               top: `${style.positionY ?? 82}%`,
               transform: 'translate(-50%, -50%)',
               animation: dragging || resizing ? 'none' : 'subtitle-pop 240ms ease-out',
-              boxShadow: `0 calc(24 * 100cqw / ${Math.max(video.width, 1)}) calc(50 * 100cqw / ${Math.max(video.width, 1)}) rgba(0, 0, 0, 0.12)`,
+              boxShadow: getSubtitleShadow(previewScale, 0.12),
               letterSpacing: '-0.03em',
             }}
             onMouseDown={interactive ? handleDragStart : undefined}

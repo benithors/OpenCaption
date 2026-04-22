@@ -50,6 +50,26 @@ describe('transcription service', () => {
     ]);
   });
 
+  it('fails when whisper-1 does not return word timestamps', async () => {
+    const clientFactory = (): OpenAiTranscriptionClient => ({
+      audio: {
+        transcriptions: {
+          create: async () => ({
+            text: 'Hello world',
+            segments: [{start: 0, end: 1, text: 'Hello world'}],
+          }),
+        },
+      },
+    });
+
+    await expect(transcribeVideo(fixturePath, {
+      apiKey: 'test-key',
+      clientFactory,
+      thresholdBytes: Number.MAX_SAFE_INTEGER,
+      model: 'whisper-1',
+    })).rejects.toThrow('word timestamps');
+  });
+
   it('offsets chunked transcription results', async () => {
     const calls: Array<{startText: string}> = [];
     const clientFactory = (): OpenAiTranscriptionClient => ({

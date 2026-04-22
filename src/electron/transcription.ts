@@ -82,7 +82,27 @@ const transcribeSingleFile = async (
 
   const segments = Array.isArray(response.segments) ? response.segments : [];
   const words = Array.isArray(response.words) ? response.words : [];
+  const offsettedWords = offsetWords(words, offsetSec);
+
+  if (supportsWordTimestamps && offsettedWords.length === 0) {
+    throw new Error('OpenAI transcription did not return word timestamps.');
+  }
+
   if (segments.length === 0) {
+    if (offsettedWords.length > 0) {
+      return {
+        segments: [
+          {
+            id: `${offsetSec}-0`,
+            start: offsettedWords[0].start,
+            end: offsettedWords[offsettedWords.length - 1].end,
+            text: offsettedWords.map((word) => word.word).join(' '),
+          },
+        ],
+        words: offsettedWords,
+      };
+    }
+
     return {
       segments: fallbackSegmentsFromText(response.text ?? '', offsetSec, durationSec),
       words: [],
@@ -96,7 +116,7 @@ const transcribeSingleFile = async (
       end: segment.end + offsetSec,
       text: segment.text,
     })),
-    words: offsetWords(words, offsetSec),
+    words: offsettedWords,
   };
 };
 

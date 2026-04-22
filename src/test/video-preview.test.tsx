@@ -28,7 +28,7 @@ describe('VideoPreview', () => {
     fireEvent.timeUpdate(video, {target: {currentTime: 0.8}});
     expect(screen.getByText('First')).toBeInTheDocument();
     expect(screen.getByText(/subtitle/)).toBeInTheDocument();
-    expect(container.querySelector('.video-preview-subtitle')?.getAttribute('style')).toMatch(/font-size:\s*calc\([^;]*cqw\);/);
+    expect(container.querySelector('.video-preview-subtitle')?.getAttribute('style')).toMatch(/font-size:\s*[0-9.]+px;/);
 
     fireEvent.timeUpdate(video, {target: {currentTime: 2.4}});
     expect(screen.getByText('Second')).toBeInTheDocument();
