@@ -697,6 +697,13 @@ select:focus {
   pointer-events: none;
 }
 
+.video-preview-selection {
+  position: absolute;
+  pointer-events: none;
+  border: 2px solid var(--accent);
+  box-sizing: border-box;
+}
+
 .subtitle-interactive {
   pointer-events: auto;
   cursor: grab;
@@ -727,6 +734,58 @@ select:focus {
   opacity: 0;
   transition: opacity 0.15s;
   pointer-events: auto;
+}
+
+.subtitle-resize-n {
+  top: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  cursor: ns-resize;
+}
+
+.subtitle-resize-s {
+  bottom: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  cursor: ns-resize;
+}
+
+.subtitle-resize-e {
+  top: 50%;
+  right: -7px;
+  transform: translateY(-50%);
+  cursor: ew-resize;
+}
+
+.subtitle-resize-w {
+  top: 50%;
+  left: -7px;
+  transform: translateY(-50%);
+  cursor: ew-resize;
+}
+
+.subtitle-resize-ne {
+  top: -7px;
+  right: -7px;
+  cursor: nesw-resize;
+}
+
+.subtitle-resize-nw {
+  top: -7px;
+  left: -7px;
+  cursor: nwse-resize;
+}
+
+.subtitle-resize-se {
+  bottom: -7px;
+  right: -7px;
+  cursor: nwse-resize;
+}
+
+.subtitle-resize-sw {
+  bottom: -7px;
+  left: -7px;
+  cursor: nesw-resize;
 }
 
 .subtitle-interactive:hover .subtitle-resize-handle,

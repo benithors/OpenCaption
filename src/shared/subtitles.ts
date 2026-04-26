@@ -30,6 +30,7 @@ export type SubtitleStyle = {
   positionX: number;
   positionY: number;
   maxWidth: number;
+  boxWidthPercent: number | null;
   maxLines: number;
 };
 
@@ -78,12 +79,22 @@ const defaults: SubtitleStyle = {
   positionX: 50,
   positionY: 82,
   maxWidth: 85,
+  boxWidthPercent: null,
   maxLines: 2,
 };
 
 export const defaultSubtitleStyle = (): SubtitleStyle => ({...defaults});
 
-export const migrateStyle = (partial: Partial<SubtitleStyle>): SubtitleStyle => ({...defaults, ...partial});
+export const migrateStyle = (partial: Partial<SubtitleStyle>): SubtitleStyle => {
+  const migrated = {...defaults, ...partial};
+  return {
+    ...migrated,
+    fontSize: Number.isFinite(migrated.fontSize) ? Math.max(4, migrated.fontSize) : defaults.fontSize,
+    boxOpacity: Number.isFinite(migrated.boxOpacity) ? migrated.boxOpacity : defaults.boxOpacity,
+    positionX: Number.isFinite(migrated.positionX) ? migrated.positionX : defaults.positionX,
+    positionY: Number.isFinite(migrated.positionY) ? migrated.positionY : defaults.positionY,
+  };
+};
 
 export const normalizeCueText = (text: string) =>
   text

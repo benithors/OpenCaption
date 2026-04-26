@@ -29,7 +29,8 @@ export const getSubtitleBoxStyle = (style: SubtitleStyle, scale = 1) => ({
   fontWeight: style.fontWeight,
   lineHeight: 1.08,
   textAlign: style.textAlign,
-  maxWidth: `${style.maxWidth}%`,
+  width: style.boxWidthPercent === null ? undefined : `${style.boxWidthPercent}%`,
+  maxWidth: style.boxWidthPercent === null ? `${style.maxWidth}%` : undefined,
   boxSizing: 'border-box' as const,
   whiteSpace: 'pre-wrap' as const,
   wordBreak: 'break-word' as const,
@@ -38,6 +39,15 @@ export const getSubtitleBoxStyle = (style: SubtitleStyle, scale = 1) => ({
 
 export const getSubtitleShadow = (scale = 1, opacity = 0.35) =>
   `0 ${24 * scale}px ${50 * scale}px rgba(0, 0, 0, ${opacity})`;
+
+const scalePreviewLength = (value: number, renderWidth: number) => `calc(${value} * 100cqw / ${Math.max(renderWidth, 1)})`;
+
+export const getPreviewSubtitleBoxStyle = (style: SubtitleStyle, renderWidth: number) => ({
+  ...getSubtitleBoxStyle(style),
+  borderRadius: scalePreviewLength(style.borderRadius, renderWidth),
+  padding: `${scalePreviewLength(style.paddingY, renderWidth)} ${scalePreviewLength(style.paddingX, renderWidth)}`,
+  fontSize: scalePreviewLength(style.fontSize, renderWidth),
+});
 
 export const hexToRgba = (hex: string, opacity: number) => {
   const normalized = hex.replace('#', '');

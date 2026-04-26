@@ -115,7 +115,7 @@ describe('subtitle domain', () => {
     expect(validateStyle(style)).toEqual([]);
     expect(style.fontSize).toBe(20);
     expect(validateStyle({...style, fontSize: 4})).toEqual([]);
-    expect(validateStyle({...style, fontSize: -1})).toContain('fontSize must be non-negative');
+    expect(validateStyle({...style, fontSize: -1})).toContain('fontSize must be at least 4');
     expect(validateStyle({...style, fontSize: 129})).toContain('fontSize must be at most 128');
   });
 });

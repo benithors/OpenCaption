@@ -4,9 +4,12 @@ import {App} from '@renderer/App';
 import {mockTranscriptionResult} from '@shared/mock';
 import type {ExportProgressPayload} from '@shared/ipc';
 
-vi.mock('@remotion/player', () => ({
-  Player: () => <div data-testid="mock-player">player</div>,
-}));
+vi.mock('@remotion/player', async () => {
+  const React = await import('react');
+  return {
+    Player: React.forwardRef<HTMLDivElement>((_props, _ref) => <div data-testid="mock-player">player</div>),
+  };
+});
 
 const bridge = {
   importVideo: vi.fn(),
@@ -91,6 +94,19 @@ describe('App', () => {
     expect(await screen.findByRole('heading', {name: 'Export complete'})).toBeInTheDocument();
     fireEvent.click(screen.getByText('Open Containing Folder'));
     await waitFor(() => expect(bridge.openContainingFolder).toHaveBeenCalledWith({path: '/tmp/export.mp4'}));
+  });
+
+  it('loads debug captions without calling the transcription bridge', async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByText(/Drop a video here/));
+    await screen.findByText('Debug captions');
+
+    fireEvent.click(screen.getByText('Debug captions'));
+
+    expect(bridge.transcribeVideo).not.toHaveBeenCalled();
+    expect(await screen.findByDisplayValue('Hello from the')).toBeInTheDocument();
+    expect(screen.getByText('Debug captions loaded locally.')).toBeInTheDocument();
   });
 
   it('allows canceling an in-flight export', async () => {

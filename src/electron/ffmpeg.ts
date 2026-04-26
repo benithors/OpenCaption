@@ -8,11 +8,17 @@ import {planAudioChunks, type ChunkPlan} from '@shared/chunking';
 
 const execFileAsync = promisify(execFile);
 
-const parseFrameRate = (value?: string) => {
-  if (!value || value === '0/0') return 30;
-  const [numerator, denominator] = value.split('/').map(Number);
-  if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator === 0) return 30;
-  return numerator / denominator;
+export const parseFrameRate = (...values: Array<string | undefined>) => {
+  for (const value of values) {
+    if (!value || value === '0/0') continue;
+    const [numerator, denominator] = value.split('/').map(Number);
+    if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator === 0) continue;
+
+    const fps = numerator / denominator;
+    if (fps >= 1 && fps <= 120) return fps;
+  }
+
+  return 30;
 };
 
 export const probeVideo = async (videoPath: string): Promise<VideoMetadata> => {
@@ -22,14 +28,14 @@ export const probeVideo = async (videoPath: string): Promise<VideoMetadata> => {
     '-select_streams',
     'v:0',
     '-show_entries',
-    'stream=width,height,r_frame_rate:format=duration,size',
+    'stream=width,height,avg_frame_rate,r_frame_rate:format=duration,size',
     '-of',
     'json',
     videoPath,
   ]);
 
   const parsed = JSON.parse(stdout) as {
-    streams?: Array<{width?: number; height?: number; r_frame_rate?: string}>;
+    streams?: Array<{width?: number; height?: number; avg_frame_rate?: string; r_frame_rate?: string}>;
     format?: {duration?: string; size?: string};
   };
 
@@ -41,7 +47,7 @@ export const probeVideo = async (videoPath: string): Promise<VideoMetadata> => {
     path: videoPath,
     width: stream.width ?? 1080,
     height: stream.height ?? 1920,
-    fps: parseFrameRate(stream.r_frame_rate),
+    fps: parseFrameRate(stream.avg_frame_rate, stream.r_frame_rate),
     durationSec,
     sizeBytes: fileSize,
   };

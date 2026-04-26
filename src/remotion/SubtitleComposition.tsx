@@ -38,6 +38,7 @@ export const SubtitleComposition: React.FC<SubtitleCompositionProps> = ({
       <AbsoluteFill>
         {activeChunk ? (
           <div
+            data-caption-box="true"
             style={{
               ...boxStyle,
               color: undefined,

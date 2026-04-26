@@ -3,6 +3,7 @@ import type {Cue, SubtitleStyle, VideoMetadata} from '@shared/subtitles';
 import {defaultSubtitleStyle, migrateStyle, normalizeSegmentsToCues, updateCueText} from '@shared/subtitles';
 import {validateStyle} from '@shared/schema';
 import type {ExportProgressPayload} from '@shared/ipc';
+import {mockTranscriptionResult} from '@shared/mock';
 import {VideoPreview} from './components/VideoPreview';
 
 const fontWeightOptions = [
@@ -61,7 +62,7 @@ const StyleBar: React.FC<{style: SubtitleStyle; onChange: (s: SubtitleStyle) => 
       </label>
       <label className="field-inline field-narrow">
         <span>Size</span>
-        <input type="number" max={128} value={style.fontSize} onChange={(e) => onChange({...style, fontSize: Number(e.target.value)})} />
+        <input type="number" min={4} max={128} value={style.fontSize} onChange={(e) => onChange({...style, fontSize: Number(e.target.value)})} />
       </label>
     </div>
     <div className="style-row">
@@ -202,25 +203,35 @@ export const App: React.FC = () => {
     }
   };
 
+  const applyTranscription = useCallback((result: {segments: Array<{start: number; end: number; text: string; id?: string | number}>; words: Array<{word: string; start: number; end: number}>; source: 'openai' | 'mock'}, nextStatus?: string) => {
+    setCues(normalizeSegmentsToCues(result.segments, result.words));
+    setTranscriptSource(result.source);
+    setStatus(
+      nextStatus
+      ?? (result.source === 'mock'
+        ? 'Mock transcript loaded. Save an API key for OpenAI transcription.'
+        : 'Transcription complete.'),
+    );
+  }, []);
+
   const handleTranscribe = async () => {
     if (!video) return;
     setBusy(true);
     setStatus('Transcribing…');
     try {
       const result = await window.appBridge.transcribeVideo({videoPath: video.path, apiKey});
-      setCues(normalizeSegmentsToCues(result.segments, result.words));
-      setTranscriptSource(result.source);
-      setStatus(
-        result.source === 'mock'
-          ? 'Mock transcript loaded. Save an API key for OpenAI transcription.'
-          : 'Transcription complete.',
-      );
+      applyTranscription(result);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     } finally {
       setBusy(false);
     }
   };
+
+  const handleLoadDebugCaptions = useCallback(() => {
+    if (!video) return;
+    applyTranscription(mockTranscriptionResult(), 'Debug captions loaded locally.');
+  }, [applyTranscription, video]);
 
   const handleExport = async () => {
     if (!video || cues.length === 0 || styleErrors.length > 0) return;
@@ -390,6 +401,9 @@ export const App: React.FC = () => {
             <button className="btn btn-primary btn-lg" onClick={handleTranscribe} disabled={busy}>
               {busy ? 'Transcribing…' : 'Transcribe'}
             </button>
+            <button className="btn btn-ghost btn-lg" onClick={handleLoadDebugCaptions} disabled={busy}>
+              Debug captions
+            </button>
           </div>
         </div>
       )}
@@ -407,6 +421,9 @@ export const App: React.FC = () => {
               <span className="cue-count">{cues.length} cues</span>
               {transcriptSource === 'mock' && <span className="badge-mock">mock</span>}
               <div className="editor-actions">
+                <button className="btn btn-sm btn-ghost" onClick={handleLoadDebugCaptions}>
+                  Debug captions
+                </button>
                 <button className="btn btn-sm btn-ghost" onClick={handleCopyTranscript}>
                   Copy all
                 </button>
